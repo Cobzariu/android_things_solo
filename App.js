@@ -1,60 +1,39 @@
 import React, {useEffect, useState} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  Button,
-  View,
-} from 'react-native';
+import {StyleSheet, Text, Button, View} from 'react-native';
 import RNSoundLevel from 'react-native-sound-level';
 import MQTT from 'sp-react-native-mqtt';
-import {Buffer} from 'buffer';
-global.Buffer = Buffer;
-
-MQTT.createClient({
-  uri: 'mqtt://test.mosquitto.org:1883',
-  clientId: '892198',
-})
-  .then(function (client) {
-    client.on('closed', function () {
-      console.log('mqtt.event.closed');
-    });
-
-    client.on('error', function (msg) {
-      console.log('mqtt.event.error', msg);
-    });
-
-    client.on('message', function (msg) {
-      console.log('mqtt.event.message', msg);
-    });
-
-    client.on('connect', function () {
-      console.log('connected');
-      client.subscribe('/ANA_ARE', 0);
-      client.publish('/ANA_ARE', 'mere', 0, false);
-    });
-
-    client.connect();
-  })
-  .catch(function (err) {
-    console.log(err);
-  });
 
 const App = () => {
   const [soundLevel, setSoundLevel] = useState(0);
   useEffect(() => {
     RNSoundLevel.start();
-    RNSoundLevel.onNewFrame = data => {
-      var peakAmplitude = data.rawValue;
-      const REFERENCE = 0.00002;
-      var pressure = peakAmplitude / 51805.5336;
-      var db = Math.floor(20 * Math.log10(pressure / REFERENCE));
-      //console.log(db);
-      setSoundLevel(db);
-    };
+    MQTT.createClient({
+      uri: 'mqtt://test.mosquitto.org:1883',
+      clientId: '892198',
+    })
+      .then(function (client) {
+        client.connect();
+        var db = 0;
+        setInterval(function () {
+          RNSoundLevel.onNewFrame = data => {
+            var peakAmplitude = data.rawValue;
+            const REFERENCE = 0.00002;
+            var pressure = peakAmplitude / 51805.5336;
+            db = Math.floor(20 * Math.log10(pressure / REFERENCE));
+            setSoundLevel(db);
+          };
+
+          client.publish(
+            '/measure/db/AT',
+            new Date().toString() + '*' + db.toString(),
+            0,
+            false,
+          );
+        }, 1000);
+      })
+      .catch(function (err) {
+        console.log(err);
+      });
   }, []);
   useEffect(() => {
     return () => {
@@ -64,8 +43,6 @@ const App = () => {
   return (
     <View style={styles.mainView}>
       <Text style={styles.textStyle}>{soundLevel} dB</Text>
-      <Button title="CONNECT" />
-      <Button title="Publish" />
     </View>
   );
 };
